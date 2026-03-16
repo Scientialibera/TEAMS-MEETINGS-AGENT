@@ -4,33 +4,44 @@ An AI-powered Microsoft Teams bot that monitors users' calendars for recording r
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Azure App Service (Always On)                      │
-│                                                     │
-│  ┌──────────────┐  ┌────────────┐  ┌────────────┐  │
-│  │ Bot Endpoint  │  │  Webhook   │  │ Background │  │
-│  │ /api/messages │  │/api/notify │  │ Scheduler  │  │
-│  └──────┬───────┘  └─────┬──────┘  └─────┬──────┘  │
-│         │                │               │          │
-└─────────┼────────────────┼───────────────┼──────────┘
-          │                │               │
-          ▼                ▼               ▼
-    ┌───────────┐   ┌───────────┐   ┌───────────────┐
-    │ Azure Bot │   │ Microsoft │   │ Blob Storage  │
-    │ Service   │   │   Graph   │   │ (user list +  │
-    │ (Teams)   │   │ (Calendar,│   │  state)       │
-    └───────────┘   │ Transcripts│  └───────────────┘
-                    │ AI Insights│
-                    └───────────┘
-          │                               │
-          ▼                               ▼
-    ┌───────────┐                  ┌──────────────┐
-    │ Azure     │                  │ Azure AI     │
-    │ OpenAI    │                  │ Search       │
-    │ (chat +   │                  │ (transcript  │
-    │ embedding)│                  │  index)      │
-    └───────────┘                  └──────────────┘
+```mermaid
+flowchart TB
+  subgraph appService ["App Service (Always On)"]
+    bot["Bot Endpoint\n/api/messages"]
+    webhook["Webhook\n/api/notifications"]
+    scheduler["Background Scheduler"]
+  end
+
+  subgraph azure ["Azure Services"]
+    storage["Blob Storage\nuser list + state"]
+    openai["Azure OpenAI\nchat + embeddings"]
+    search["AI Search\ntranscript index"]
+    botSvc["Azure Bot Service"]
+  end
+
+  subgraph graph ["Microsoft Graph"]
+    calendar["Calendar API"]
+    transcripts["Transcript API"]
+    insights["AI Insights API\nCopilot"]
+    subscriptions["Change Notifications"]
+  end
+
+  teams["Teams Client"] <-->|"messages + cards"| botSvc
+  botSvc <--> bot
+
+  scheduler -->|"read monitored users"| storage
+  scheduler -->|"fetch upcoming meetings"| calendar
+  scheduler -->|"send pre-meeting reminder"| bot
+  scheduler -->|"create/renew subscriptions"| subscriptions
+
+  subscriptions -->|"transcript available"| webhook
+  webhook -->|"fetch transcript content"| transcripts
+  webhook -->|"fetch structured summary"| insights
+  webhook -->|"index chunks + metadata"| search
+  webhook -->|"push summary card"| bot
+
+  bot -->|"transcript chat"| openai
+  bot -->|"search transcripts"| search
 ```
 
 ## Core Flows
