@@ -1,0 +1,56 @@
+[azure]
+subscription_id = ""
+location = "eastus"
+resource_group_name = ""
+
+[naming]
+prefix = "teamsmeetingsagent"
+web_app_name = ""
+app_service_plan_name = ""
+storage_account_name = ""
+openai_account_name = ""
+search_service_name = ""
+bot_name = ""
+
+[storage]
+users_container = "monitored-users"
+state_container = "bot-state"
+
+[entra]
+app_display_name = "Teams Meetings Agent"
+# populated after app registration; leave empty for first run
+app_id = ""
+app_secret = ""
+
+[graph]
+api_version = "v1.0"
+reminder_window_minutes = 15
+scheduler_interval_minutes = 5
+subscription_renewal_minutes = 50
+
+[openai]
+deploy_openai = true
+chat_deployment = "gpt-4-1"
+chat_model = "gpt-4.1"
+chat_model_version = "2025-04-14"
+embedding_deployment = "text-embedding-3-large"
+embedding_model = "text-embedding-3-large"
+embedding_model_version = "1"
+sku_name = "S0"
+deployment_sku_name = "GlobalStandard"
+capacity = 50
+api_version = "2024-12-01-preview"
+
+[search]
+deploy_search = true
+index_name = "transcripts-index"
+sku = "basic"
+use_vector = true
+embedding_dimensions = 3072
+
+[bot]
+bot_sku = "F0"
+
+[app_settings]
+webapp_sku = "B1"
+python_version = "3.11"

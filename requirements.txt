@@ -1,0 +1,10 @@
+aiohttp>=3.9,<4
+botbuilder-core>=4.16,<5
+botbuilder-integration-aiohttp>=4.16,<5
+msal>=1.28,<2
+azure-identity>=1.17,<2
+azure-storage-blob>=12.20,<13
+azure-search-documents>=11.6,<12
+openai>=1.40,<2
+apscheduler>=3.10,<4
+gunicorn>=22,<23

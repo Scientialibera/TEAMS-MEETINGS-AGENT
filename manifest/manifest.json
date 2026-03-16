@@ -1,0 +1,63 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{{BOT_ID}}",
+  "developer": {
+    "name": "Your Organization",
+    "websiteUrl": "https://{{APP_DOMAIN}}",
+    "privacyUrl": "https://{{APP_DOMAIN}}/privacy",
+    "termsOfUseUrl": "https://{{APP_DOMAIN}}/terms"
+  },
+  "name": {
+    "short": "Meetings Agent",
+    "full": "Teams Meetings Agent"
+  },
+  "description": {
+    "short": "Recording reminders, transcript summaries, and cross-meeting search.",
+    "full": "An AI-powered Teams agent that monitors your meetings, reminds you to record, delivers AI-generated summaries with action items after each meeting, and lets you chat about or search across all your indexed meeting transcripts."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#5B5FC7",
+  "bots": [
+    {
+      "botId": "{{BOT_ID}}",
+      "scopes": ["personal"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            {
+              "title": "help",
+              "description": "Show available commands"
+            },
+            {
+              "title": "transcripts",
+              "description": "List available transcripts to chat about"
+            },
+            {
+              "title": "search: <query>",
+              "description": "Search across all meeting transcripts"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "{{APP_DOMAIN}}"
+  ],
+  "webApplicationInfo": {
+    "id": "{{BOT_ID}}",
+    "resource": "api://{{APP_DOMAIN}}/{{BOT_ID}}"
+  }
+}

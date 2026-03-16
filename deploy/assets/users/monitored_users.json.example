@@ -1,0 +1,10 @@
+[
+  {
+    "upn": "jane.doe@contoso.com",
+    "display_name": "Jane Doe"
+  },
+  {
+    "upn": "john.smith@contoso.com",
+    "display_name": "John Smith"
+  }
+]
