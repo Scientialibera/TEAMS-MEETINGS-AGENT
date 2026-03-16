@@ -50,6 +50,13 @@ class Settings:
     subscription_renewal_minutes: int = field(default_factory=lambda: _env_int("SUBSCRIPTION_RENEWAL_MINUTES", 50))
     webhook_url: str = field(default_factory=lambda: _env("WEBHOOK_URL"))
 
+    # Redis cache
+    redis_host: str = field(default_factory=lambda: _env("REDIS_HOST"))
+    redis_port: int = field(default_factory=lambda: _env_int("REDIS_PORT", 6380))
+    redis_password: str = field(default_factory=lambda: _env("REDIS_PASSWORD"))
+    redis_ssl: bool = field(default_factory=lambda: _env_bool("REDIS_SSL", True))
+    redis_reminder_ttl_seconds: int = field(default_factory=lambda: _env_int("REDIS_REMINDER_TTL_SECONDS", 21600))
+
     # Server
     port: int = field(default_factory=lambda: _env_int("PORT", 8000))
 

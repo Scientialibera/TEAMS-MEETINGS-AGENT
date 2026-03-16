@@ -7,6 +7,7 @@ from typing import Any
 
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
+from redis.asyncio import Redis
 
 from src.config import get_settings
 from src.graph.calendar import get_upcoming_meetings, meeting_start_iso
@@ -15,7 +16,69 @@ from src.graph.users import resolve_user_id
 logger = logging.getLogger(__name__)
 
 _credential = DefaultAzureCredential()
-_sent_reminders: set[str] = set()
+_sent_reminders_fallback: set[str] = set()
+_redis_client: Redis | None = None
+
+
+def _reminder_cache_key(reminder_key: str) -> str:
+    return f"reminder:sent:{reminder_key}"
+
+
+def _get_redis_client() -> Redis | None:
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+
+    s = get_settings()
+    if not s.redis_host:
+        return None
+
+    _redis_client = Redis(
+        host=s.redis_host,
+        port=s.redis_port,
+        password=s.redis_password or None,
+        ssl=s.redis_ssl,
+        decode_responses=True,
+    )
+    return _redis_client
+
+
+async def _try_reserve_reminder(reminder_key: str) -> bool:
+    s = get_settings()
+    redis_client = _get_redis_client()
+    if redis_client is None:
+        if reminder_key in _sent_reminders_fallback:
+            return False
+        _sent_reminders_fallback.add(reminder_key)
+        return True
+
+    try:
+        return bool(
+            await redis_client.set(
+                _reminder_cache_key(reminder_key),
+                "1",
+                ex=s.redis_reminder_ttl_seconds,
+                nx=True,
+            )
+        )
+    except Exception:
+        logger.error("Redis cache unavailable while reserving reminder key", exc_info=True)
+        if reminder_key in _sent_reminders_fallback:
+            return False
+        _sent_reminders_fallback.add(reminder_key)
+        return True
+
+
+async def _release_reminder(reminder_key: str) -> None:
+    redis_client = _get_redis_client()
+    if redis_client is None:
+        _sent_reminders_fallback.discard(reminder_key)
+        return
+    try:
+        await redis_client.delete(_reminder_cache_key(reminder_key))
+    except Exception:
+        logger.error("Redis cache unavailable while releasing reminder key", exc_info=True)
+        _sent_reminders_fallback.discard(reminder_key)
 
 
 async def load_monitored_users() -> list[dict[str, Any]]:
@@ -54,24 +117,14 @@ async def scan_and_remind(send_reminder_fn) -> int:
         for event in meetings:
             event_id = event.get("id", "")
             reminder_key = f"{user_id}:{event_id}"
-            if reminder_key in _sent_reminders:
+            if not await _try_reserve_reminder(reminder_key):
                 continue
 
             try:
                 await send_reminder_fn(user_id, event)
-                _sent_reminders.add(reminder_key)
                 count += 1
             except Exception:
+                await _release_reminder(reminder_key)
                 logger.error("Failed to send reminder for %s / %s", upn, event.get("subject"), exc_info=True)
 
-    _cleanup_old_reminders()
     return count
-
-
-def _cleanup_old_reminders() -> None:
-    """Prune sent-reminders set to avoid unbounded growth (keep last 5000)."""
-    global _sent_reminders
-    if len(_sent_reminders) > 5000:
-        # keep the most recent half
-        trimmed = set(list(_sent_reminders)[-2500:])
-        _sent_reminders = trimmed
