@@ -46,6 +46,15 @@ function Normalize-CogName {
     return "$Prefix-$normalized"
 }
 
+function Normalize-RedisName {
+    param([string]$Value)
+    $normalized = ($Value.ToLower() -replace "[^a-z0-9]", "")
+    if ([string]::IsNullOrWhiteSpace($normalized)) { throw "Invalid naming prefix for redis cache." }
+    if ($normalized.Length -lt 3) { $normalized = $normalized + "123" }
+    if ($normalized.Length -gt 58) { $normalized = $normalized.Substring(0, 58) }
+    return "redis$normalized"
+}
+
 function Ensure-RoleAssignment {
     param(
         [string]$PrincipalId,
@@ -86,6 +95,7 @@ $aspName      = Select-Value $config.naming.app_service_plan_name "plan-$prefix"
 $storageAcct  = Select-Value $config.naming.storage_account_name (Normalize-StorageAccountName -Value $prefix)
 $searchSvc    = Select-Value $config.naming.search_service_name (Normalize-SearchName -Value $prefix)
 $openAiAcct   = Select-Value $config.naming.openai_account_name (Normalize-CogName -Prefix "aoai" -Value $prefix)
+$redisCache   = Select-Value $config.naming.redis_cache_name (Normalize-RedisName -Value $prefix)
 $botName      = Select-Value $config.naming.bot_name "bot-$prefix"
 
 $usersContainer = $config.storage.users_container
@@ -94,6 +104,8 @@ $stateContainer = $config.storage.state_container
 $deployOpenAI  = [bool]$config.openai.deploy_openai
 $deploySearch  = [bool]$config.search.deploy_search
 $searchSku     = $config.search.sku
+$redisSku      = Select-Value $config.redis.sku "Basic"
+$redisCapacity = Select-Value $config.redis.capacity "C0"
 $webAppSku     = Select-Value $config.app_settings.webapp_sku "B1"
 $pythonVersion = Select-Value $config.app_settings.python_version "3.11"
 $botSku        = Select-Value $config.bot.bot_sku "F0"
@@ -230,7 +242,20 @@ if ([string]::IsNullOrWhiteSpace($configuredAppId)) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Azure Bot Service
+# 7. Azure Cache for Redis
+# ---------------------------------------------------------------------------
+Write-Step "Ensuring Redis cache '$redisCache'."
+$redisExists = az redis list --resource-group $rg --query "[?name=='$redisCache'] | length(@)" -o tsv
+if ($redisExists -eq "0") {
+    az redis create `
+      --resource-group $rg --name $redisCache --location $location `
+      --sku $redisSku --vm-size $redisCapacity `
+      --enable-non-ssl-port false `
+      --minimum-tls-version "1.2" | Out-Null
+}
+
+# ---------------------------------------------------------------------------
+# 8. Azure Bot Service
 # ---------------------------------------------------------------------------
 Write-Step "Ensuring Azure Bot '$botName'."
 $botExists = az bot show --resource-group $rg --name $botName 2>$null
@@ -246,7 +271,7 @@ if ([string]::IsNullOrWhiteSpace($botExists)) {
 }
 
 # ---------------------------------------------------------------------------
-# 8. Teams Channel
+# 9. Teams Channel
 # ---------------------------------------------------------------------------
 Write-Step "Ensuring Teams channel on bot."
 $teamsChannelExists = az bot msteams show --resource-group $rg --name $botName 2>$null
@@ -255,7 +280,7 @@ if ([string]::IsNullOrWhiteSpace($teamsChannelExists)) {
 }
 
 # ---------------------------------------------------------------------------
-# 9. Web App Managed Identity + RBAC
+# 10. Web App Managed Identity + RBAC
 # ---------------------------------------------------------------------------
 Write-Step "Assigning system-managed identity to Web App."
 az webapp identity assign --resource-group $rg --name $webAppName --identities [system] | Out-Null
@@ -272,13 +297,17 @@ if (-not [string]::IsNullOrWhiteSpace($openAiEndpoint)) {
 
 $searchScope = az search service show --resource-group $rg --name $searchSvc --query id -o tsv
 Ensure-RoleAssignment -PrincipalId $webAppPrincipalId -Scope $searchScope -Role "Search Index Data Contributor"
+$redisScope = az redis show --resource-group $rg --name $redisCache --query id -o tsv
+Ensure-RoleAssignment -PrincipalId $webAppPrincipalId -Scope $redisScope -Role "Reader"
 
 # ---------------------------------------------------------------------------
-# 10. Web App Settings
+# 11. Web App Settings
 # ---------------------------------------------------------------------------
 Write-Step "Setting Web App application settings."
 $blobUrl = (az storage account show --resource-group $rg --name $storageAcct --query "primaryEndpoints.blob" -o tsv).TrimEnd("/")
 $searchEndpoint = "https://$searchSvc.search.windows.net"
+$redisHost = az redis show --resource-group $rg --name $redisCache --query hostName -o tsv
+$redisPassword = az redis list-keys --resource-group $rg --name $redisCache --query primaryKey -o tsv
 $tenantId = az account show --query tenantId -o tsv
 
 $settings = @(
@@ -301,12 +330,17 @@ $settings = @(
     "REMINDER_WINDOW_MINUTES=$($config.graph.reminder_window_minutes)",
     "SCHEDULER_INTERVAL_MINUTES=$($config.graph.scheduler_interval_minutes)",
     "SUBSCRIPTION_RENEWAL_MINUTES=$($config.graph.subscription_renewal_minutes)",
-    "WEBHOOK_URL=https://$webAppName.azurewebsites.net/api/notifications"
+    "WEBHOOK_URL=https://$webAppName.azurewebsites.net/api/notifications",
+    "REDIS_HOST=$redisHost",
+    "REDIS_PORT=6380",
+    "REDIS_PASSWORD=$redisPassword",
+    "REDIS_SSL=true",
+    "REDIS_REMINDER_TTL_SECONDS=$($config.redis.reminder_ttl_seconds)"
 )
 az webapp config appsettings set --resource-group $rg --name $webAppName --settings $settings | Out-Null
 
 # ---------------------------------------------------------------------------
-# 11. Application Access Policy (manual step guidance)
+# 12. Application Access Policy (manual step guidance)
 # ---------------------------------------------------------------------------
 Write-Step "---"
 Write-Step "MANUAL STEP: Application Access Policy for Graph Online Meeting APIs."
@@ -334,6 +368,7 @@ Write-Output "Web App:           $webAppName (https://$webAppName.azurewebsites.
 Write-Output "App Service Plan:  $aspName"
 Write-Output "Azure OpenAI:      $openAiAcct"
 Write-Output "AI Search:         $searchSvc"
+Write-Output "Redis Cache:       $redisCache"
 Write-Output "Bot:               $botName"
 Write-Output "Entra App ID:      $appId"
 Write-Output ""

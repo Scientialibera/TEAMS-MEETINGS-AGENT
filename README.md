@@ -51,7 +51,7 @@ flowchart TB
 1. Background scheduler reads `monitored_users.json` from Blob Storage every N minutes.
 2. For each user, queries `GET /users/{userId}/calendarView` for upcoming Teams meetings.
 3. For meetings starting within the reminder window (default 15 min), sends a proactive Adaptive Card: "Meeting X starts soon -- remember to start recording."
-4. Tracks sent reminders in-memory to avoid duplicates.
+4. Tracks sent reminders in Redis cache to avoid duplicates across app instances/restarts.
 
 ### Flow 2 -- Transcript Processing
 
@@ -142,12 +142,13 @@ All configuration lives in [`deploy/deploy.config.toml`](deploy/deploy.config.to
 | Section | Key fields |
 |---|---|
 | `[azure]` | `subscription_id`, `location`, `resource_group_name` |
-| `[naming]` | `prefix`, `web_app_name`, `storage_account_name`, `openai_account_name`, `search_service_name`, `bot_name` |
+| `[naming]` | `prefix`, `web_app_name`, `storage_account_name`, `openai_account_name`, `search_service_name`, `redis_cache_name`, `bot_name` |
 | `[storage]` | `users_container`, `state_container` |
 | `[entra]` | `app_display_name`, `app_id`, `app_secret` |
 | `[graph]` | `reminder_window_minutes`, `scheduler_interval_minutes`, `subscription_renewal_minutes` |
 | `[openai]` | `chat_deployment`, `embedding_deployment`, `api_version` |
 | `[search]` | `index_name`, `sku`, `use_vector`, `embedding_dimensions` |
+| `[redis]` | `sku`, `capacity`, `reminder_ttl_seconds` |
 | `[bot]` | `bot_sku` |
 
 If naming fields are left empty, they are derived from `naming.prefix`.
@@ -167,7 +168,7 @@ If naming fields are left empty, they are derived from `naming.prefix`.
 .\deploy\deploy-infra.ps1
 ```
 
-Creates (idempotently): Resource Group, Storage Account, App Service Plan + Web App (Always On), Azure OpenAI + deployments, AI Search, Entra App Registration + secret, Azure Bot Service + Teams channel, RBAC assignments, and Web App settings.
+Creates (idempotently): Resource Group, Storage Account, App Service Plan + Web App (Always On), Azure OpenAI + deployments, AI Search, Azure Cache for Redis, Entra App Registration + secret, Azure Bot Service + Teams channel, RBAC assignments, and Web App settings.
 
 **After running**, follow the printed instructions to create the Application Access Policy in Teams PowerShell:
 

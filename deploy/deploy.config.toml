@@ -10,6 +10,7 @@ app_service_plan_name = ""
 storage_account_name = ""
 openai_account_name = ""
 search_service_name = ""
+redis_cache_name = ""
 bot_name = ""
 
 [storage]
@@ -47,6 +48,11 @@ index_name = "transcripts-index"
 sku = "basic"
 use_vector = true
 embedding_dimensions = 3072
+
+[redis]
+sku = "Basic"
+capacity = "C0"
+reminder_ttl_seconds = 21600
 
 [bot]
 bot_sku = "F0"
